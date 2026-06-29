@@ -74,6 +74,12 @@ dark, classroom, night, standing
 
 Note what happened: `jean shorts` was remapped to the real alias `denim shorts`, `arms crossed` to `crossed arms`, `smirking` to `smirk`, `crop top` and `classroom` were pulled out of multi-word phrases, and `young adult` (not a real tag) was dropped. Finally the tags are wrapped in your template and the non-tags are reported on the `dropped_tags` output.
 
+And the result, straight from that prompt through NovaAnimeXL:
+
+<p align="center">
+  <img src="images/demo.png" alt="Generated vampire girl in a dark classroom" width="512">
+</p>
+
 Everything runs locally. No internet connection required after setup.
 
 ---

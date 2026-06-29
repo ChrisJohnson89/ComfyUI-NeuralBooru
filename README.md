@@ -1,6 +1,6 @@
 # 🧠 NeuralBooru
 
-**Turn plain English into anime-ready prompts using a local LLM — no cloud, no API keys, no nonsense.**
+**Turn plain English into Booru-style prompts using a local LLM — no cloud, no API keys, no nonsense.**
 
 NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance and your image generation pipeline. Describe a scene in plain English and it automatically converts it into precise booru-style tags, wraps them in your model's preferred template, and feeds them straight into the sampler.
 

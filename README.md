@@ -12,12 +12,30 @@ NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance 
 
 ```mermaid
 flowchart LR
-    A["user_prompt\n(plain English)"] -->|describe scene| B(["NeuralBooru\nNode"])
-    B -->|OpenAI-compatible API| C[("LM Studio\nLocal LLM")]
-    C -->|booru tags| B
-    B -->|prompt_template| D["Formatted Prompt"]
-    D --> E["KSampler"]
-    E --> F[/"Generated\nImage"/]
+    UP["user_prompt"] --> NB
+
+    subgraph NB ["NeuralBooru"]
+        LMB(["LM Studio Booru\nqwen3-1.7b"])
+    end
+
+    LMB <-->|"OpenAI API · localhost:1234"| LMS[("LM Studio\nLocal LLM")]
+
+    subgraph LOAD ["Load Model"]
+        CKPT["novaAnimeXL\nCheckpoint"]
+    end
+
+    NB -->|"formatted prompt\n(template applied)"| POS["CLIP Text Encode\n(Positive)"]
+    CKPT -->|CLIP| CLIPS["CLIP Set\nLast Layer"]
+    CLIPS -->|CLIP| POS
+    CKPT -->|CLIP| NEG["CLIP Text Encode\n(Negative)"]
+    CKPT -->|MODEL| KS["KSampler\n25 steps · cfg 5.5\neuler_ancestral"]
+    CKPT -->|VAE| DEC["VAE Decode"]
+
+    POS -->|positive| KS
+    NEG -->|negative| KS
+    LAT["Empty Latent\n1024 × 1024"] -->|latent| KS
+    KS -->|samples| DEC
+    DEC --> SAVE["Save Image"]
 ```
 
 ```

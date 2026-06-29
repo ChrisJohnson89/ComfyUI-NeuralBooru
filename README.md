@@ -15,11 +15,11 @@ NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance 
 flowchart LR
     UP["user_prompt"] --> LMB
 
-    subgraph NB ["NeuralBooru"]
-        LMB(["LM Studio Booru<br/>qwen3-1.7b"])
+    subgraph NB ["NeuralBooru (this repo)"]
+        LMB(["NeuralBooru<br/>node"])
     end
 
-    LMB <-->|"OpenAI API · localhost:1234"| LMS[("LM Studio<br/>Local LLM")]
+    LMB <-->|"OpenAI-compatible API<br/>localhost:1234"| LMS[("LM Studio<br/>qwen3-1.7b")]
 
     subgraph LOAD ["Load Model"]
         CKPT["novaAnimeXL<br/>Checkpoint"]

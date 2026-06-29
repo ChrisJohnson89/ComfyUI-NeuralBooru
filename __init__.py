@@ -10,6 +10,11 @@ import re
 import urllib.request
 import urllib.error
 
+try:
+    from . import tags as tagdb
+except ImportError:  # standalone / direct import
+    import tags as tagdb
+
 
 NOVA_ANIME_XL_TEMPLATE = (
     "masterpiece, best quality, amazing quality, 4k, very aesthetic, "
@@ -64,17 +69,30 @@ class NeuralBooru:
                     "multiline": False,
                     "default": "http://localhost:1234"
                 }),
+                "validate_tags": ("BOOLEAN", {"default": True}),
+                "strict_tags": ("BOOLEAN", {"default": True}),
+                "fuzzy_cutoff": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05
+                }),
+                "min_post_count": ("INT", {
+                    "default": 0, "min": 0, "max": 1000000, "step": 100
+                }),
+                "max_tags": ("INT", {
+                    "default": 0, "min": 0, "max": 200, "step": 1
+                }),
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("prompt",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt", "dropped_tags")
     FUNCTION = "generate"
     CATEGORY = "NeuralBooru"
     OUTPUT_NODE = False
 
     def generate(self, user_prompt, system_prompt, prompt_template, model,
-                 temperature, max_tokens, lm_studio_url):
+                 temperature, max_tokens, lm_studio_url,
+                 validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
+                 min_post_count=0, max_tags=0):
 
         url = lm_studio_url.rstrip("/") + "/v1/chat/completions"
 
@@ -107,16 +125,43 @@ class NeuralBooru:
                     text = re.sub(r"<think>.*?</think>", "", text,
                                   flags=re.DOTALL).strip()
 
-                final = prompt_template.replace("{prompt}", text)
+                tags, dropped = self._validate(
+                    text, validate_tags, strict_tags,
+                    fuzzy_cutoff, min_post_count, max_tags)
+
+                final = prompt_template.replace("{prompt}", tags)
                 print(f"[NeuralBooru] {final[:160]}...")
-                return (final,)
+                if dropped:
+                    print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
+                return (final, ", ".join(dropped))
 
         except urllib.error.URLError as e:
             print(f"[NeuralBooru] Connection failed - is LM Studio running? ({e})")
-            return (prompt_template.replace("{prompt}", user_prompt),)
+            return (prompt_template.replace("{prompt}", user_prompt), "")
         except Exception as e:
             print(f"[NeuralBooru] Error: {e}")
-            return (prompt_template.replace("{prompt}", user_prompt),)
+            return (prompt_template.replace("{prompt}", user_prompt), "")
+
+    def _validate(self, text, enabled, strict, fuzzy_cutoff,
+                  min_post_count, max_tags):
+        """Filter LLM tags against the Danbooru vocabulary.
+
+        Returns (tag_string, dropped_list). Falls back to the raw text if
+        validation is off or the tag database could not be loaded.
+        """
+        if not enabled:
+            return text, []
+        db = tagdb.get_db()
+        if db is None:
+            return text, []
+        prompt, _kept, dropped = db.validate(
+            text,
+            strict=strict,
+            fuzzy_cutoff=fuzzy_cutoff,
+            min_post_count=min_post_count,
+            max_tags=max_tags,
+        )
+        return prompt, dropped
 
 
 NODE_CLASS_MAPPINGS = {

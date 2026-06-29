@@ -9,7 +9,7 @@ dependencies = []
 Repository = "https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru"
 
 [tool.comfy]
-PublisherId = "YOUR_USERNAME"
+PublisherId = "chrisjohnson"
 DisplayName = "NeuralBooru"
 Icon = ""
 Tags = ["anime", "llm", "prompt", "booru", "lm-studio", "local-ai"]

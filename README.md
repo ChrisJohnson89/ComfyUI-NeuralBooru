@@ -10,6 +10,16 @@ NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance 
 
 ## How It Works
 
+```mermaid
+flowchart LR
+    A["user_prompt\n(plain English)"] -->|describe scene| B(["NeuralBooru\nNode"])
+    B -->|OpenAI-compatible API| C[("LM Studio\nLocal LLM")]
+    C -->|booru tags| B
+    B -->|prompt_template| D["Formatted Prompt"]
+    D --> E["KSampler"]
+    E --> F[/"Generated\nImage"/]
+```
+
 ```
 "vampire girl in a dark classroom at night"
         ↓  (local LLM via LM Studio)
@@ -49,7 +59,7 @@ Search for `NeuralBooru` in the Custom Nodes section.
 **Manual:**
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/YOUR_USERNAME/ComfyUI-NeuralBooru
+git clone https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru
 ```
 
 Restart ComfyUI. The **Neural Booru** node will appear under the `NeuralBooru` category.

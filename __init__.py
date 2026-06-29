@@ -168,10 +168,79 @@ class NeuralBooru:
         return prompt, dropped
 
 
+class NeuralBooruValidate:
+    """Validate any text into real Danbooru tags. No LLM call.
+
+    Takes a STRING (from ComfyUI's native TextGenerate node, a vision-model
+    caption, another prompt node, or typed in) and runs it through the same
+    Danbooru validator as the main node. The LLM source is up to you; this
+    node just guarantees the output is real tags.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Tags or text to validate. Wire in another "
+                               "node's output, or type directly."
+                }),
+                "prompt_template": ("STRING", {
+                    "multiline": True,
+                    "default": "{prompt}"
+                }),
+                "strict_tags": ("BOOLEAN", {"default": True}),
+                "fuzzy_cutoff": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05
+                }),
+                "min_post_count": ("INT", {
+                    "default": 0, "min": 0, "max": 1000000, "step": 100
+                }),
+                "max_tags": ("INT", {
+                    "default": 0, "min": 0, "max": 200, "step": 1
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt", "dropped_tags")
+    FUNCTION = "validate"
+    CATEGORY = "NeuralBooru"
+    OUTPUT_NODE = False
+
+    def validate(self, text, prompt_template="{prompt}", strict_tags=True,
+                 fuzzy_cutoff=0.0, min_post_count=0, max_tags=0):
+        db = tagdb.get_db()
+        if db is None:
+            tags, dropped = text, []
+        else:
+            tags, _kept, dropped = db.validate(
+                text,
+                strict=strict_tags,
+                fuzzy_cutoff=fuzzy_cutoff,
+                min_post_count=min_post_count,
+                max_tags=max_tags,
+            )
+
+        if "{prompt}" in prompt_template:
+            final = prompt_template.replace("{prompt}", tags)
+        else:
+            final = tags
+
+        print(f"[NeuralBooru] validated -> {final[:160]}...")
+        if dropped:
+            print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
+        return (final, ", ".join(dropped))
+
+
 NODE_CLASS_MAPPINGS = {
     "NeuralBooru": NeuralBooru,
+    "NeuralBooruValidate": NeuralBooruValidate,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NeuralBooru": "NeuralBooru",
+    "NeuralBooruValidate": "NeuralBooru Validate",
 }

@@ -1,0 +1,15 @@
+[project]
+name = "comfyui-neuralbooru"
+description = "Turn natural language into anime prompts using a local LLM"
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/ComfyUI-NeuralBooru"
+
+[tool.comfy]
+PublisherId = "YOUR_USERNAME"
+DisplayName = "NeuralBooru"
+Icon = ""
+Tags = ["anime", "llm", "prompt", "booru", "lm-studio", "local-ai"]

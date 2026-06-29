@@ -81,7 +81,7 @@ cd ComfyUI/custom_nodes
 git clone https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru
 ```
 
-Restart ComfyUI. The **Neural Booru** node will appear under the `NeuralBooru` category.
+Restart ComfyUI. The **NeuralBooru** node will appear under the `NeuralBooru` category.
 
 ---
 

@@ -6,7 +6,7 @@ license = {file = "LICENSE"}
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/YOUR_USERNAME/ComfyUI-NeuralBooru"
+Repository = "https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru"
 
 [tool.comfy]
 PublisherId = "YOUR_USERNAME"

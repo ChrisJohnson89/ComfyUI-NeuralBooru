@@ -23,17 +23,21 @@ NOVA_ANIME_XL_TEMPLATE = (
 )
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are an anime image generation prompt expert. "
-    "Convert the user's description into a concise comma-separated list of booru-style tags. "
-    "CRITICAL FORMATTING RULES: "
-    "Use spaces not underscores (write 'black hair' not 'black_hair'). "
-    "Use only real standard booru tags - do not invent or guess tags. "
-    "Focus ONLY on: character appearance (hair color, eye color, clothing, expression, pose, accessories), "
-    "scene setting (location, time of day, weather, atmosphere, background elements), "
-    "and specific art style details. "
-    "Do NOT include quality tags like masterpiece, best quality, score_9, absurdres, etc. "
-    "Those are handled separately. "
-    "Output tags only - no explanation, no numbering, no markdown. /no_think"
+    "You convert a scene description into Danbooru tags for an anime image model. "
+    "Output ONLY lowercase tags separated by commas. "
+    "No sentences, no explanations, no numbering, no category words. "
+    "Write attributes in real Danbooru tag style: 'blue eyes' not 'eye color blue', "
+    "'black hair' not 'hair color black'. Use spaces, not underscores. "
+    "Use 1girl, 1boy, 2girls, etc. for people. "
+    "Do NOT add quality tags like masterpiece, best quality, absurdres, score_9 - "
+    "those are added separately.\n"
+    "Example input: a cheerful blonde girl in a red dress on a beach at sunset\n"
+    "Example output: 1girl, blonde hair, long hair, smile, red dress, beach, sunset, "
+    "ocean, sky, cloud, standing\n"
+    "Example input: a lone samurai in the rain at night\n"
+    "Example output: 1boy, solo, samurai, japanese clothes, katana, rain, night, wet, "
+    "serious, outdoors\n"
+    "Now output tags only for the next description. /no_think"
 )
 
 

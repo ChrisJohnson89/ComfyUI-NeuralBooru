@@ -145,6 +145,10 @@ Tag validation is on by default. Check the ComfyUI console for a `[NeuralBooru] 
 
 ## Node Parameters
 
+<p align="center">
+  <img src="images/node.png" alt="The NeuralBooru node with its inputs, widgets, and outputs" width="420">
+</p>
+
 | Parameter | Default | Description |
 |---|---|---|
 | `user_prompt` | - | Plain English scene description |

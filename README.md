@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/header.png" alt="NeuralBooru — AI-powered Anime Workflow for ComfyUI" width="100%">
+</p>
+
 # 🧠 NeuralBooru
 
 **Turn plain English into Booru-style prompts using a local LLM — no cloud, no API keys, no nonsense.**

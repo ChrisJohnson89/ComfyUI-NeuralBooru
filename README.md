@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="images/header.png" alt="NeuralBooru - AI-powered Anime Workflow for ComfyUI" width="100%">
-</p>
-
 **Turn plain English into real Danbooru tags using a local LLM. No cloud, no API keys, no nonsense.**
 
 NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance and your image generation pipeline. Describe a scene in plain English and it converts it into booru-style tags, validates them against the real Danbooru vocabulary so only tags your model was actually trained on survive, wraps them in your model's preferred template, and feeds them straight into the sampler.

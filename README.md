@@ -12,30 +12,30 @@ NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance 
 
 ```mermaid
 flowchart LR
-    UP["user_prompt"] --> NB
+    UP["user_prompt"] --> LMB
 
     subgraph NB ["NeuralBooru"]
-        LMB(["LM Studio Booru\nqwen3-1.7b"])
+        LMB(["LM Studio Booru<br/>qwen3-1.7b"])
     end
 
-    LMB <-->|"OpenAI API · localhost:1234"| LMS[("LM Studio\nLocal LLM")]
+    LMB <-->|"OpenAI API · localhost:1234"| LMS[("LM Studio<br/>Local LLM")]
 
     subgraph LOAD ["Load Model"]
-        CKPT["novaAnimeXL\nCheckpoint"]
+        CKPT["novaAnimeXL<br/>Checkpoint"]
     end
 
-    NB -->|"formatted prompt\n(template applied)"| POS["CLIP Text Encode\n(Positive)"]
-    CKPT -->|CLIP| CLIPS["CLIP Set\nLast Layer"]
+    LMB -->|"formatted prompt<br/>(template applied)"| POS["CLIP Text Encode<br/>(Positive)"]
+    CKPT -->|CLIP| CLIPS["CLIP Set<br/>Last Layer"]
     CLIPS -->|CLIP| POS
-    CKPT -->|CLIP| NEG["CLIP Text Encode\n(Negative)"]
-    CKPT -->|MODEL| KS["KSampler\n25 steps · cfg 5.5\neuler_ancestral"]
+    CLIPS -->|CLIP| NEG["CLIP Text Encode<br/>(Negative)"]
+    CKPT -->|MODEL| KS["KSampler<br/>25 steps · cfg 5.5<br/>euler_ancestral"]
     CKPT -->|VAE| DEC["VAE Decode"]
 
     POS -->|positive| KS
     NEG -->|negative| KS
-    LAT["Empty Latent\n1024 × 1024"] -->|latent| KS
+    LAT["Empty Latent<br/>1024 × 1024"] -->|latent| KS
     KS -->|samples| DEC
-    DEC --> SAVE["Save Image"]
+    DEC -->|IMAGE| SAVE["Save Image"]
 ```
 
 ```

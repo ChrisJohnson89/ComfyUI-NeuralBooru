@@ -235,12 +235,50 @@ class NeuralBooruValidate:
         return (final, ", ".join(dropped))
 
 
+class NeuralBooruPrompt:
+    """Build an LLM prompt from a clean two-field layout.
+
+    The same user_prompt + system_prompt experience as the main node, but it
+    only outputs a single combined STRING. Feed that into ComfyUI's native
+    TextGenerate node (or any text-input LLM node) so the native flow gets the
+    familiar two-field prompt UX instead of one mashed box.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "user_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "describe your scene here"
+                }),
+                "system_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": DEFAULT_SYSTEM_PROMPT
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("prompt",)
+    FUNCTION = "build"
+    CATEGORY = "NeuralBooru"
+    OUTPUT_NODE = False
+
+    def build(self, user_prompt, system_prompt):
+        combined = f"{system_prompt.strip()}\nScene: {user_prompt.strip()}"
+        print(f"[NeuralBooru] built prompt ({len(combined)} chars)")
+        return (combined,)
+
+
 NODE_CLASS_MAPPINGS = {
     "NeuralBooru": NeuralBooru,
+    "NeuralBooruPrompt": NeuralBooruPrompt,
     "NeuralBooruValidate": NeuralBooruValidate,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NeuralBooru": "NeuralBooru",
+    "NeuralBooruPrompt": "NeuralBooru Prompt",
     "NeuralBooruValidate": "NeuralBooru Validate",
 }

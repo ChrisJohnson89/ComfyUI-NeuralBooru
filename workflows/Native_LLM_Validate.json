@@ -640,14 +640,14 @@
     },
     {
       "id": 13,
-      "type": "StringConcatenate",
+      "type": "NeuralBooruPrompt",
       "pos": [
         -1900,
         -1120
       ],
       "size": [
-        340,
-        200
+        380,
+        320
       ],
       "flags": {},
       "order": 0,
@@ -655,7 +655,7 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "STRING",
+          "name": "prompt",
           "type": "STRING",
           "slot_index": 0,
           "links": [
@@ -664,12 +664,11 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "StringConcatenate"
+        "Node name for S&R": "NeuralBooruPrompt"
       },
       "widgets_values": [
-        "You convert a scene description into Danbooru tags for an anime image model. Output ONLY lowercase tags separated by commas. No sentences, no explanations, no category words. Write 'blue eyes' not 'eye color blue'. Use 1girl, 1boy, 2girls for people. Output tags only for this scene:",
         "a cute vampire girl with fangs, jean shorts, black crop top, arms crossed, smirking, dark classroom at night",
-        "\n"
+        "You convert a scene description into Danbooru tags for an anime image model. Output ONLY lowercase tags separated by commas. No sentences, no explanations, no numbering, no category words. Write attributes in real Danbooru tag style: 'blue eyes' not 'eye color blue', 'black hair' not 'hair color black'. Use spaces, not underscores. Use 1girl, 1boy, 2girls, etc. for people. Do NOT add quality tags like masterpiece, best quality, absurdres, score_9 - those are added separately.\nExample input: a cheerful blonde girl in a red dress on a beach at sunset\nExample output: 1girl, blonde hair, long hair, smile, red dress, beach, sunset, ocean, sky, cloud, standing\nExample input: a lone samurai in the rain at night\nExample output: 1boy, solo, samurai, japanese clothes, katana, rain, night, wet, serious, outdoors\nNow output tags only for the next description. /no_think"
       ]
     }
   ],

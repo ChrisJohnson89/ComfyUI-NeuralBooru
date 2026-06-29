@@ -4,7 +4,7 @@
 
 NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance and your image generation pipeline. Describe a scene in plain English and it automatically converts it into precise booru-style tags, wraps them in your model's preferred template, and feeds them straight into the sampler.
 
-![Example 1](images/example1.png) ![Example 2](images/example2.png)
+![Example 1](images/example1.png) 
 
 ---
 
@@ -131,4 +131,5 @@ Swap this out for any model's preferred format.
 
 ## License
 
-MIT - do whatever you want with it.
+MIT - do whatever you want with it - I do not care.
+![Example 2](images/example2.png)

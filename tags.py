@@ -39,6 +39,26 @@ def normalize(tag):
     return t
 
 
+def _morph_variants(norm):
+    """Candidate stems for a word that did not resolve directly.
+
+    Handles common verb/plural forms: smirking->smirk, posing->pose,
+    crossed->cross, cats->cat. Conservative: only the last token is stemmed
+    and very short stems are skipped to avoid false hits.
+    """
+    out = []
+    if "_" in norm:  # only stem the final word of a phrase
+        head, _, tail = norm.rpartition("_")
+        prefix = head + "_"
+    else:
+        prefix, tail = "", norm
+    for suf, repl in (("ing", ""), ("ing", "e"), ("ed", ""), ("ed", "e"),
+                      ("es", ""), ("s", "")):
+        if tail.endswith(suf) and len(tail) - len(suf) >= 3:
+            out.append(prefix + tail[:-len(suf)] + repl)
+    return out
+
+
 def to_prompt(tag):
     """Render a canonical tag for the prompt: spaces, escaped parens.
 
@@ -92,10 +112,14 @@ class TagDB:
         norm = normalize(candidate)
         if not norm:
             return None
-        if norm in self.canonical:
-            return norm
-        if norm in self.alias:
-            return self.alias[norm]
+        direct = self._lookup(norm)
+        if direct:
+            return direct
+        # morphological variants: smirking -> smirk, posing -> pose, cats -> cat
+        for v in _morph_variants(norm):
+            hit = self._lookup(v)
+            if hit:
+                return hit
         if fuzzy_cutoff and fuzzy_cutoff > 0:
             if self._keys is None:
                 self._keys = list(self.canonical.keys())
@@ -103,6 +127,39 @@ class TagDB:
             if hit:
                 return hit[0]
         return None
+
+    def _lookup(self, norm):
+        """Exact canonical or alias hit for an already-normalized string."""
+        if norm in self.canonical:
+            return norm
+        if norm in self.alias:
+            return self.alias[norm]
+        return None
+
+    def extract(self, candidate, fuzzy_cutoff=0.0):
+        """Pull real tags out of a multi-word candidate that did not resolve.
+
+        Greedy longest-match left to right, so "black crop top" yields
+        ["black", "crop top"] and "dark classroom" yields ["classroom"].
+        Single-word candidates return [] (nothing to salvage).
+        """
+        toks = [w for w in re.split(r"\s+", candidate.strip().lower()) if w]
+        if len(toks) < 2:
+            return []
+        found, i = [], 0
+        while i < len(toks):
+            matched = False
+            for j in range(len(toks), i, -1):
+                sub = "_".join(toks[i:j])
+                hit = self.resolve(sub, fuzzy_cutoff) if j - i > 1 else self._lookup(sub)
+                if hit:
+                    found.append(hit)
+                    i = j
+                    matched = True
+                    break
+            if not matched:
+                i += 1
+        return found
 
     def validate(self, text, strict=True, fuzzy_cutoff=0.0,
                  min_post_count=0, max_tags=0, exclude_categories=None):
@@ -118,35 +175,46 @@ class TagDB:
         exclude = set(exclude_categories or ())
         kept, dropped, seen = [], [], set()
 
+        def accept(norm):
+            """Apply category/count/dedupe filters; append if it passes."""
+            _orig, category, count = self.canonical[norm]
+            if category in exclude:
+                return False
+            if min_post_count and count < min_post_count:
+                return False
+            if norm in seen:
+                return True  # already have it; treat as accepted (not dropped)
+            seen.add(norm)
+            kept.append(to_prompt(norm))
+            return True
+
         for cand in (c.strip() for c in text.split(",")):
             if not cand:
                 continue
-            norm = self.resolve(cand, fuzzy_cutoff)
-            if norm is None:
-                if strict:
-                    dropped.append(cand)
-                    continue
-                # lenient: keep the raw candidate as-is
-                key = normalize(cand)
-                if key in seen:
-                    continue
-                seen.add(key)
-                kept.append(to_prompt(key))
-                continue
-
-            original, category, count = self.canonical[norm]
-            if category in exclude:
-                dropped.append(cand)
-                continue
-            if min_post_count and count < min_post_count:
-                dropped.append(cand)
-                continue
-            if norm in seen:
-                continue
-            seen.add(norm)
-            kept.append(to_prompt(norm))
             if max_tags and len(kept) >= max_tags:
                 break
+
+            norm = self.resolve(cand, fuzzy_cutoff)
+            if norm is not None:
+                if not accept(norm):
+                    dropped.append(cand)
+                continue
+
+            # salvage real tags embedded in a multi-word phrase before dropping
+            subs = self.extract(cand, fuzzy_cutoff)
+            if subs:
+                # evaluate every sub-tag (no short-circuit) so we keep all of them
+                results = [accept(s) for s in subs]
+                if any(results):
+                    continue
+
+            if strict:
+                dropped.append(cand)
+            else:
+                key = normalize(cand)
+                if key not in seen:
+                    seen.add(key)
+                    kept.append(to_prompt(key))
 
         return ", ".join(kept), kept, dropped
 

@@ -49,21 +49,30 @@ class NeuralBooru:
             "required": {
                 "user_prompt": ("STRING", {
                     "multiline": True,
-                    "default": "describe your scene here"
+                    "default": "describe your scene here",
+                    "tooltip": "Plain-English scene description to convert into tags."
                 }),
                 "system_prompt": ("STRING", {
                     "multiline": True,
-                    "default": DEFAULT_SYSTEM_PROMPT
+                    "default": DEFAULT_SYSTEM_PROMPT,
+                    "tooltip": "Instructions for the LLM. Edit to change tagging behavior."
                 }),
                 "prompt_template": ("STRING", {
                     "multiline": True,
-                    "default": NOVA_ANIME_XL_TEMPLATE
+                    "default": NOVA_ANIME_XL_TEMPLATE,
+                    "tooltip": "Final prompt wrapper; {prompt} is replaced with the "
+                               "validated tags. If {prompt} is missing, tags are appended."
                 }),
                 "model": ("STRING", {
                     "multiline": False,
-                    "default": "qwen/qwen3-1.7b"
+                    "default": "qwen/qwen3-1.7b",
+                    "tooltip": "Model id as the server reports it (see /v1/models)."
                 }),
-                "enable_thinking": ("BOOLEAN", {"default": False}),
+                "enable_thinking": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Allow reasoning-mode models to think before answering. "
+                               "Slower; output is cleaned either way."
+                }),
                 "temperature": ("FLOAT", {
                     "default": 0.4, "min": 0.0, "max": 2.0, "step": 0.05
                 }),
@@ -74,22 +83,58 @@ class NeuralBooru:
                 # also passed to the API (llama.cpp seeds are 32-bit)
                 "seed": ("INT", {
                     "default": 0, "min": 0, "max": 0xffffffff,
-                    "control_after_generate": True
+                    "control_after_generate": True,
+                    "tooltip": "Change to re-roll the LLM call; also sent to the API."
                 }),
                 "lm_studio_url": ("STRING", {
                     "multiline": False,
-                    "default": "http://localhost:1234"
+                    "default": "http://localhost:1234",
+                    "tooltip": "Base URL of any OpenAI-compatible server: "
+                               "LM Studio (:1234), Ollama (:11434), llama.cpp, vLLM."
                 }),
-                "validate_tags": ("BOOLEAN", {"default": True}),
-                "strict_tags": ("BOOLEAN", {"default": True}),
+                "validate_tags": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Check every tag against the real Danbooru vocabulary."
+                }),
+                "strict_tags": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Drop candidates that match no real tag. Off keeps them raw."
+                }),
                 "fuzzy_cutoff": ("FLOAT", {
-                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Remap near-miss tags by similarity (0.8+ recommended). "
+                               "0 disables fuzzy matching."
                 }),
                 "min_post_count": ("INT", {
-                    "default": 0, "min": 0, "max": 1000000, "step": 100
+                    "default": 0, "min": 0, "max": 1000000, "step": 100,
+                    "tooltip": "Drop tags with fewer Danbooru posts than this. 0 keeps all."
                 }),
                 "max_tags": ("INT", {
-                    "default": 0, "min": 0, "max": 200, "step": 1
+                    "default": 0, "min": 0, "max": 200, "step": 1,
+                    "tooltip": "Keep at most this many tags. 0 means no limit."
+                }),
+            },
+            "optional": {
+                "timeout": ("INT", {
+                    "default": 120, "min": 10, "max": 600, "step": 10,
+                    "tooltip": "Seconds to wait for the LLM response."
+                }),
+                "api_key": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                    "tooltip": "Optional Bearer token for servers that require auth "
+                               "(vLLM, remote endpoints). Leave empty for LM Studio/Ollama."
+                }),
+                "exclude_categories": ("STRING", {
+                    "multiline": False,
+                    "default": "",
+                    "tooltip": "Tag categories to drop, comma-separated: "
+                               "artist, character, copyright, meta, general."
+                }),
+                "on_error": (["raise", "use_input_text"], {
+                    "default": "raise",
+                    "tooltip": "raise: fail the workflow with a visible error. "
+                               "use_input_text: put your raw description in the template."
                 }),
             }
         }
@@ -103,7 +148,8 @@ class NeuralBooru:
     def generate(self, user_prompt, system_prompt, prompt_template, model,
                  enable_thinking, temperature, max_tokens, seed, lm_studio_url,
                  validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
-                 min_post_count=0, max_tags=0):
+                 min_post_count=0, max_tags=0, timeout=120, api_key="",
+                 exclude_categories="", on_error="raise"):
 
         url = lm_studio_url.rstrip("/") + "/v1/chat/completions"
 
@@ -127,16 +173,20 @@ class NeuralBooru:
             # honored by Ollama for Qwen3-style models; ignored elsewhere
             payload["enable_thinking"] = False
 
+        headers = {"Content-Type": "application/json"}
+        if api_key.strip():
+            headers["Authorization"] = "Bearer " + api_key.strip()
+
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 msg = result["choices"][0]["message"]
                 text = (msg.get("content") or "").strip()
@@ -156,23 +206,40 @@ class NeuralBooru:
 
                 tags, dropped = self._validate(
                     text, validate_tags, strict_tags,
-                    fuzzy_cutoff, min_post_count, max_tags)
+                    fuzzy_cutoff, min_post_count, max_tags,
+                    _parse_categories(exclude_categories))
 
-                final = prompt_template.replace("{prompt}", tags)
+                final = _apply_template(prompt_template, tags)
                 print(f"[NeuralBooru] {final[:160]}...")
                 if dropped:
                     print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
                 return (final, ", ".join(dropped))
 
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8", "replace")[:300]
+            except Exception:
+                detail = ""
+            return self._fail(f"Server returned HTTP {e.code}: {detail}",
+                              on_error, prompt_template, user_prompt, e)
         except urllib.error.URLError as e:
-            print(f"[NeuralBooru] Connection failed - is LM Studio running? ({e})")
-            return (prompt_template.replace("{prompt}", user_prompt), "")
+            return self._fail(
+                f"Could not reach the LLM server at {lm_studio_url} ({e.reason}). "
+                f"Is it running?", on_error, prompt_template, user_prompt, e)
         except Exception as e:
-            print(f"[NeuralBooru] Error: {e}")
-            return (prompt_template.replace("{prompt}", user_prompt), "")
+            return self._fail(f"Unexpected error: {e}",
+                              on_error, prompt_template, user_prompt, e)
+
+    def _fail(self, msg, on_error, prompt_template, user_prompt, exc):
+        """Surface an LLM failure per on_error: raise it, or fall back to
+        the raw input text so the workflow still produces an image."""
+        if on_error == "raise":
+            raise RuntimeError(f"NeuralBooru: {msg}") from exc
+        print(f"[NeuralBooru] {msg} - falling back to raw input text")
+        return (_apply_template(prompt_template, user_prompt), "")
 
     def _validate(self, text, enabled, strict, fuzzy_cutoff,
-                  min_post_count, max_tags):
+                  min_post_count, max_tags, exclude=()):
         """Filter LLM tags against the Danbooru vocabulary.
 
         Returns (tag_string, dropped_list). Falls back to the raw text if
@@ -189,8 +256,39 @@ class NeuralBooru:
             fuzzy_cutoff=fuzzy_cutoff,
             min_post_count=min_post_count,
             max_tags=max_tags,
+            exclude_categories=exclude,
         )
         return prompt, dropped
+
+
+def _apply_template(template, prompt):
+    """Insert prompt into the template; append it if {prompt} is missing
+    so tags are never silently discarded."""
+    if "{prompt}" in template:
+        return template.replace("{prompt}", prompt)
+    print("[NeuralBooru] prompt_template has no {prompt} placeholder; appending")
+    if not template.strip():
+        return prompt
+    return template.rstrip().rstrip(",") + ", " + prompt
+
+
+def _parse_categories(spec):
+    """Parse 'artist, meta' (or '1, 5') into a set of category ints.
+    Unknown names are reported and skipped."""
+    names = {v: k for k, v in tagdb.CATEGORY_NAMES.items()}
+    out = set()
+    for part in spec.split(","):
+        part = part.strip().lower()
+        if not part:
+            continue
+        if part.isdigit():
+            out.add(int(part))
+        elif part in names:
+            out.add(names[part])
+        else:
+            print(f"[NeuralBooru] unknown tag category {part!r} ignored "
+                  f"(valid: {', '.join(names)})")
+    return out
 
 
 NODE_CLASS_MAPPINGS = {

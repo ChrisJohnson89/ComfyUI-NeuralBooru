@@ -140,8 +140,9 @@ class TagDB:
         """Pull real tags out of a multi-word candidate that did not resolve.
 
         Greedy longest-match left to right, so "black crop top" yields
-        ["black", "crop top"] and "dark classroom" yields ["classroom"].
-        Single-word candidates return [] (nothing to salvage).
+        ["crop_top"] ("black" alone is not a tag) and "dark classroom"
+        yields ["dark", "classroom"]. Single-word candidates return []
+        (nothing to salvage).
         """
         toks = [w for w in re.split(r"\s+", candidate.strip().lower()) if w]
         if len(toks) < 2:

@@ -7,7 +7,7 @@ deployable through the existing node via LM Studio (MLX).
 Scripts here are offline tooling and are **not** imported by the ComfyUI node.
 Generated data under `data/` is gitignored.
 
-## Phase 1 - prove the loop (pipeline as data factory)
+## Build a dataset (pipeline as data factory)
 
 ```bash
 # 1. Generate diverse English scene descriptions
@@ -47,8 +47,3 @@ fixed system prompt + input. The fused model lands in
 
 Then point LM Studio at that folder and run it through the NeuralBooru node
 unchanged. Loop proven when tags come out and validate.
-
-## Roadmap
-- Phase 2: eval scorecard (P/R/F1 vs gold, in-vocab rate, validator-change rate)
-- Phase 3: scale with back-translation from real danbooru2023 tag sets (~100k pairs), base -> Qwen2.5-1.5B
-- Phase 4: GGUF export + HuggingFace model card (NSFW-capable, provenance)

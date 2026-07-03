@@ -16,16 +16,11 @@ Planned work, roughly in order. PRs and discussion welcome.
   and dropped tags directly on the node after execution, instead of only in
   the console.
 
-## Finetuned drop-in tagger (see [finetune/README.md](finetune/README.md))
+## Finetuned drop-in tagger
 
-- **Phase 2: eval scorecard.** In-vocab rate, validator-change rate, and
-  P/R/F1 against held-out pairs, so a finetuned model has to beat the
-  prompted baseline before it ships.
-- **Phase 3: scale with back-translation.** Generate English descriptions
-  from real danbooru2023 tag sets (~100k pairs) so ground truth is real tags,
-  not model output. Move base to Qwen2.5-1.5B.
-- **Phase 4: release.** GGUF export and a HuggingFace model card with full
-  data provenance.
+- A small finetuned model that does English -> Danbooru tags natively,
+  trained with the pipeline in [finetune/](finetune/) and deployable
+  through the node unchanged.
 
 ## Considered and parked
 

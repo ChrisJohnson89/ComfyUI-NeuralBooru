@@ -69,6 +69,12 @@ class NeuralBooru:
                 "max_tokens": ("INT", {
                     "default": 500, "min": 50, "max": 2000, "step": 50
                 }),
+                # exists mainly so ComfyUI re-executes the node on demand;
+                # also passed to the API (llama.cpp seeds are 32-bit)
+                "seed": ("INT", {
+                    "default": 0, "min": 0, "max": 0xffffffff,
+                    "control_after_generate": True
+                }),
                 "lm_studio_url": ("STRING", {
                     "multiline": False,
                     "default": "http://localhost:1234"
@@ -94,7 +100,7 @@ class NeuralBooru:
     OUTPUT_NODE = False
 
     def generate(self, user_prompt, system_prompt, prompt_template, model,
-                 temperature, max_tokens, lm_studio_url,
+                 temperature, max_tokens, seed, lm_studio_url,
                  validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
                  min_post_count=0, max_tags=0):
 
@@ -108,6 +114,7 @@ class NeuralBooru:
             ],
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "seed": seed,
             "stream": False,
         }
 
@@ -124,9 +131,11 @@ class NeuralBooru:
                 result = json.loads(resp.read().decode("utf-8"))
                 text = result["choices"][0]["message"]["content"].strip()
 
-                # Strip <think>...</think> blocks (Qwen3 reasoning mode)
+                # Strip <think>...</think> blocks (Qwen3 reasoning mode).
+                # An unterminated block (max_tokens cut off mid-reasoning) is
+                # stripped to end of string so reasoning never leaks into tags.
                 if "<think>" in text:
-                    text = re.sub(r"<think>.*?</think>", "", text,
+                    text = re.sub(r"<think>.*?(?:</think>|$)", "", text,
                                   flags=re.DOTALL).strip()
 
                 tags, dropped = self._validate(

@@ -184,6 +184,8 @@ class TagDB:
                 return False
             if norm in seen:
                 return True  # already have it; treat as accepted (not dropped)
+            if max_tags and len(kept) >= max_tags:
+                return False  # limit reached; salvage path must not exceed it
             seen.add(norm)
             kept.append(to_prompt(norm))
             return True

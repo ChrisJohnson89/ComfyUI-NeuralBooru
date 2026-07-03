@@ -63,6 +63,7 @@ class NeuralBooru:
                     "multiline": False,
                     "default": "qwen/qwen3-1.7b"
                 }),
+                "enable_thinking": ("BOOLEAN", {"default": False}),
                 "temperature": ("FLOAT", {
                     "default": 0.4, "min": 0.0, "max": 2.0, "step": 0.05
                 }),
@@ -100,11 +101,16 @@ class NeuralBooru:
     OUTPUT_NODE = False
 
     def generate(self, user_prompt, system_prompt, prompt_template, model,
-                 temperature, max_tokens, seed, lm_studio_url,
+                 enable_thinking, temperature, max_tokens, seed, lm_studio_url,
                  validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
                  min_post_count=0, max_tags=0):
 
         url = lm_studio_url.rstrip("/") + "/v1/chat/completions"
+
+        if enable_thinking:
+            # let the switch win over the /no_think soft switch baked into
+            # the default system prompt
+            system_prompt = re.sub(r"\s*/no_think\s*$", "", system_prompt)
 
         payload = {
             "model": model,
@@ -117,6 +123,9 @@ class NeuralBooru:
             "seed": seed,
             "stream": False,
         }
+        if not enable_thinking:
+            # honored by Ollama for Qwen3-style models; ignored elsewhere
+            payload["enable_thinking"] = False
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -129,7 +138,14 @@ class NeuralBooru:
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
-                text = result["choices"][0]["message"]["content"].strip()
+                msg = result["choices"][0]["message"]
+                text = (msg.get("content") or "").strip()
+                if not text:
+                    # Ollama (and DeepSeek-style servers) put reasoning-model
+                    # output in a separate field, leaving content empty; the
+                    # think-strip and validator below clean it up (issue #1)
+                    text = (msg.get("reasoning") or
+                            msg.get("reasoning_content") or "").strip()
 
                 # Strip <think>...</think> blocks (Qwen3 reasoning mode).
                 # An unterminated block (max_tokens cut off mid-reasoning) is

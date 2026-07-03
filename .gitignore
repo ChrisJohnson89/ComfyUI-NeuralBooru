@@ -6,3 +6,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Finetuning artifacts (scripts are tracked, generated data is not)
+finetune/data/
+finetune/models/
+finetune/adapters/

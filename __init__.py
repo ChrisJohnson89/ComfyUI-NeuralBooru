@@ -22,6 +22,18 @@ NOVA_ANIME_XL_TEMPLATE = (
     "{prompt}, BREAK, depth of field, volumetric lighting"
 )
 
+# Quality-tag wrappers for common booru-trained model families. Selected via
+# the template_preset input; "custom" uses the prompt_template text field.
+TEMPLATE_PRESETS = {
+    "nova_anime_xl": NOVA_ANIME_XL_TEMPLATE,
+    "illustrious": ("masterpiece, best quality, very aesthetic, absurdres, "
+                    "{prompt}"),
+    "pony": "score_9, score_8_up, score_7_up, source_anime, {prompt}",
+    "animagine_xl": ("{prompt}, masterpiece, best quality, very aesthetic, "
+                     "absurdres"),
+    "tags_only": "{prompt}",
+}
+
 DEFAULT_SYSTEM_PROMPT = (
     "You convert a scene description into Danbooru tags for an anime image model. "
     "Output ONLY lowercase tags separated by commas. "
@@ -136,6 +148,17 @@ class NeuralBooru:
                     "tooltip": "raise: fail the workflow with a visible error. "
                                "use_input_text: put your raw description in the template."
                 }),
+                "template_preset": (["custom"] + sorted(TEMPLATE_PRESETS), {
+                    "default": "custom",
+                    "tooltip": "Quality-tag wrapper for common model families. "
+                               "custom uses the prompt_template field above."
+                }),
+                "sort_tags": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Reorder tags Danbooru-style: people counts, "
+                               "character, copyright, artist, general, meta. "
+                               "Booru-trained models respond to this order."
+                }),
             }
         }
 
@@ -149,9 +172,11 @@ class NeuralBooru:
                  enable_thinking, temperature, max_tokens, seed, lm_studio_url,
                  validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
                  min_post_count=0, max_tags=0, timeout=120, api_key="",
-                 exclude_categories="", on_error="raise"):
+                 exclude_categories="", on_error="raise",
+                 template_preset="custom", sort_tags=True):
 
         url = lm_studio_url.rstrip("/") + "/v1/chat/completions"
+        prompt_template = TEMPLATE_PRESETS.get(template_preset, prompt_template)
 
         if enable_thinking:
             # let the switch win over the /no_think soft switch baked into
@@ -207,7 +232,7 @@ class NeuralBooru:
                 tags, dropped = self._validate(
                     text, validate_tags, strict_tags,
                     fuzzy_cutoff, min_post_count, max_tags,
-                    _parse_categories(exclude_categories))
+                    _parse_categories(exclude_categories), sort_tags)
 
                 final = _apply_template(prompt_template, tags)
                 print(f"[NeuralBooru] {final[:160]}...")
@@ -239,7 +264,7 @@ class NeuralBooru:
         return (_apply_template(prompt_template, user_prompt), "")
 
     def _validate(self, text, enabled, strict, fuzzy_cutoff,
-                  min_post_count, max_tags, exclude=()):
+                  min_post_count, max_tags, exclude=(), sort_tags=False):
         """Filter LLM tags against the Danbooru vocabulary.
 
         Returns (tag_string, dropped_list). Falls back to the raw text if
@@ -257,6 +282,7 @@ class NeuralBooru:
             min_post_count=min_post_count,
             max_tags=max_tags,
             exclude_categories=exclude,
+            sort_tags=sort_tags,
         )
         return prompt, dropped
 

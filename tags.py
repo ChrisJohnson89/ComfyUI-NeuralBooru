@@ -29,6 +29,21 @@ CATEGORY_NAMES = {
 _WS = re.compile(r"\s+")
 _HAS_LETTER = re.compile(r"[a-z]")
 
+# Danbooru-conventional prompt order: people counts first, then character,
+# copyright, artist, general, meta. Booru-trained image models are sensitive
+# to this ordering.
+_COUNT_TAG = re.compile(
+    r"^(?:\d+(?:girls?|boys?|others?)|solo|multiple_girls|multiple_boys"
+    r"|multiple_others)$")
+_CATEGORY_ORDER = {4: 1, 3: 2, 1: 3, 0: 4, 5: 5}
+
+
+def _sort_group(norm, category):
+    """Ordering group for a kept tag; ties keep their original order."""
+    if category == 0 and _COUNT_TAG.match(norm):
+        return 0
+    return _CATEGORY_ORDER.get(category, 4)
+
 
 def normalize(tag):
     """Canonical form for matching: lowercase, unescaped, underscored."""
@@ -163,7 +178,8 @@ class TagDB:
         return found
 
     def validate(self, text, strict=True, fuzzy_cutoff=0.0,
-                 min_post_count=0, max_tags=0, exclude_categories=None):
+                 min_post_count=0, max_tags=0, exclude_categories=None,
+                 sort_tags=False):
         """Validate a comma-separated tag string.
 
         Returns (prompt_string, kept_tags, dropped_tags).
@@ -172,9 +188,11 @@ class TagDB:
         - min_post_count: drop resolved tags rarer than this
         - max_tags: 0 means no limit
         - exclude_categories: iterable of category ints to drop (e.g. {1, 5})
+        - sort_tags: reorder kept tags into Danbooru-conventional prompt
+          order (people counts, character, copyright, artist, general, meta)
         """
         exclude = set(exclude_categories or ())
-        kept, dropped, seen = [], [], set()
+        kept, dropped, seen = [], [], set()  # kept: (norm, category)
 
         def accept(norm):
             """Apply category/count/dedupe filters; append if it passes."""
@@ -188,7 +206,7 @@ class TagDB:
             if max_tags and len(kept) >= max_tags:
                 return False  # limit reached; salvage path must not exceed it
             seen.add(norm)
-            kept.append(to_prompt(norm))
+            kept.append((norm, category))
             return True
 
         for cand in (c.strip() for c in text.split(",")):
@@ -217,9 +235,12 @@ class TagDB:
                 key = normalize(cand)
                 if key not in seen:
                     seen.add(key)
-                    kept.append(to_prompt(key))
+                    kept.append((key, 0))  # raw keeps sort with general tags
 
-        return ", ".join(kept), kept, dropped
+        if sort_tags:
+            kept.sort(key=lambda e: _sort_group(e[0], e[1]))  # stable
+        out = [to_prompt(norm) for norm, _cat in kept]
+        return ", ".join(out), out, dropped
 
 
 _DB = None

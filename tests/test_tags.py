@@ -124,6 +124,26 @@ def test_validate_exclude_categories(db):
     assert dropped == ["highres"]
 
 
+def test_validate_sort_tags_danbooru_order(db):
+    # count > character > copyright > general > meta
+    assert db.canonical["hatsune_miku"][1] == 4
+    assert db.canonical["vocaloid"][1] == 3
+    assert db.canonical["absurdres"][1] == 5
+    _, kept, _ = db.validate(
+        "night, absurdres, hatsune miku, vocaloid, 1girl", sort_tags=True)
+    assert kept == ["1girl", "hatsune miku", "vocaloid", "night", "absurdres"]
+
+
+def test_validate_unsorted_by_default(db):
+    _, kept, _ = db.validate("night, 1girl")
+    assert kept == ["night", "1girl"]
+
+
+def test_validate_sort_stable_within_group(db):
+    _, kept, _ = db.validate("beach, night, smile, 1girl", sort_tags=True)
+    assert kept == ["1girl", "beach", "night", "smile"]
+
+
 def test_validate_salvage_inside_full_line(db):
     prompt, kept, dropped = db.validate("1girl, black crop top, beach")
     assert kept == ["1girl", "crop top", "beach"]

@@ -1,6 +1,8 @@
 **Turn plain English into real Danbooru tags using a local LLM. No cloud, no API keys, no nonsense.**
 
-NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance and your image generation pipeline. Describe a scene in plain English and it converts it into booru-style tags, validates them against the real Danbooru vocabulary so only tags your model was actually trained on survive, wraps them in your model's preferred template, and feeds them straight into the sampler.
+![Tests](https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru/actions/workflows/test.yml/badge.svg)
+
+NeuralBooru is a ComfyUI custom node that bridges your local LLM server (LM Studio, Ollama, llama.cpp, vLLM, anything OpenAI-compatible) and your image generation pipeline. Describe a scene in plain English and it converts it into booru-style tags, validates them against the real Danbooru vocabulary so only tags your model was actually trained on survive, orders them the way booru-trained models expect, wraps them in your model's preferred template, and feeds them straight into the sampler.
 
 ![Example 1](images/example1.png)
 
@@ -10,7 +12,7 @@ NeuralBooru is a ComfyUI custom node that bridges your local LM Studio instance 
 
 Most tag generators are specialized fine-tuned models (like TIPO/DanTagGen) that bake the tag vocabulary into their weights. NeuralBooru takes the opposite approach: it is a **model-agnostic adapter**. The LLM proposes, and a Danbooru whitelist disposes.
 
-- **Bring your own LLM.** It uses whatever model you run in LM Studio. Swap a 1.7B for a 7B or next year's model and the output improves for free.
+- **Bring your own LLM.** It uses whatever model you run in LM Studio, Ollama, or any other OpenAI-compatible server. Swap a 1.7B for a 7B or next year's model and the output improves for free.
 - **General world knowledge.** A general LLM understands "a noir detective in 1940s LA" or franchise references and reasons about what tags they imply.
 - **Validated output.** Every tag is checked against ~140k real Danbooru tags, so "tag-shaped" natural language never leaks into your prompt.
 - **Editable in plain English.** Change behavior by editing the system prompt, not by retraining a model.
@@ -83,11 +85,13 @@ Everything runs locally. No internet connection required after setup.
 ## Features
 
 - **Real tag validation** - every tag is checked against the Danbooru vocabulary, with alias remapping, word-form fixing, and multi-word recovery
-- **Model-agnostic** - uses LM Studio's OpenAI-compatible API with any chat model you have loaded
-- **Qwen3 optimized** - includes the `/no_think` directive to skip reasoning tokens and get clean output fast
-- **Template system** - inject generated tags into any model's preferred prompt format via the `{prompt}` placeholder
+- **Danbooru tag ordering** - kept tags are reordered the way booru-trained models expect: people counts, character, copyright, artist, general, meta
+- **Server-agnostic** - works with any OpenAI-compatible endpoint: LM Studio, Ollama, llama.cpp, vLLM (with optional Bearer auth)
+- **Reasoning-model aware** - `enable_thinking` switch, `<think>` stripping, and fallback to the separate reasoning field some servers use
+- **Template presets** - one-click quality-tag wrappers for Illustrious, Pony, Animagine XL, and NovaAnimeXL, or write your own with `{prompt}`
+- **Re-roll with seed** - a seed widget re-executes the node on demand for a fresh tag variation
 - **Transparency** - a second `dropped_tags` output shows exactly what was filtered
-- **Graceful fallback** - if LM Studio is not running, it wraps your raw description instead of erroring
+- **Visible errors** - a dead server fails the workflow with a clear message (or set `on_error` to fall back to your raw description)
 - **Zero dependencies** - pure Python stdlib, nothing to install
 
 ---
@@ -110,7 +114,7 @@ Your template (the quality boosters like `masterpiece, best quality`) is never v
 ## Requirements
 
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
-- [LM Studio](https://lmstudio.ai) running locally with a model loaded
+- [LM Studio](https://lmstudio.ai) or [Ollama](https://ollama.com) (or any OpenAI-compatible server) running locally with a model loaded
 - A chat model that understands booru tagging. **Qwen3-1.7B** works great and is fast
 - Any SDXL-compatible checkpoint (built and tested with [NovaAnimeXL](https://civitai.com/models/376130/nova-anime-xl))
 
@@ -154,15 +158,23 @@ Tag validation is on by default. Check the ComfyUI console for a `[NeuralBooru] 
 | `user_prompt` | - | Plain English scene description |
 | `system_prompt` | Built-in | Instructions for the LLM, controls tag style and rules |
 | `prompt_template` | NovaAnimeXL | Wrapper for generated tags. Use `{prompt}` as placeholder |
-| `model` | `qwen/qwen3-1.7b` | Model identifier as shown in LM Studio |
+| `model` | `qwen/qwen3-1.7b` | Model identifier as your server reports it (`/v1/models`) |
+| `enable_thinking` | `False` | Let reasoning models think before answering (slower) |
 | `temperature` | `0.4` | Lower = more consistent tags, higher = more creative |
 | `max_tokens` | `500` | Max tokens for the LLM response |
-| `lm_studio_url` | `http://localhost:1234` | LM Studio server address |
+| `seed` | `0` | Change to re-roll; also passed to the API |
+| `lm_studio_url` | `http://localhost:1234` | Server address. Ollama: `http://localhost:11434` |
 | `validate_tags` | `True` | Filter the LLM output against the Danbooru vocabulary |
 | `strict_tags` | `True` | Drop tags that are not real (off = keep them) |
 | `fuzzy_cutoff` | `0.0` | 0 disables. 0.85-0.95 remaps near-misses to real tags |
 | `min_post_count` | `0` | Drop tags rarer than this many Danbooru posts |
 | `max_tags` | `0` | 0 = unlimited, otherwise cap the tag count |
+| `timeout` | `120` | Seconds to wait for the LLM response |
+| `api_key` | empty | Optional Bearer token for servers that require auth |
+| `exclude_categories` | empty | Drop tag categories: `artist, character, copyright, meta` |
+| `on_error` | `raise` | Fail visibly, or `use_input_text` to fall back to your description |
+| `template_preset` | `custom` | Quality-tag wrapper: `illustrious`, `pony`, `animagine_xl`, `nova_anime_xl`, `tags_only`, or `custom` (uses `prompt_template`) |
+| `sort_tags` | `True` | Reorder kept tags into Danbooru-conventional order |
 
 ### Outputs
 
@@ -192,6 +204,14 @@ Swap this out for any model's preferred format.
 | Max tokens | 500 | Enough for detailed scenes, won't waste time |
 | Checkpoint | NovaAnimeXL Illustrious | What the default template is tuned for |
 | validate_tags | On | Keeps only real Danbooru tags |
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned work, including better fuzzy
+matching, a tag-DB refresh script, and a finetuned drop-in tagger model
+(tooling already in [finetune/](finetune/)).
 
 ---
 

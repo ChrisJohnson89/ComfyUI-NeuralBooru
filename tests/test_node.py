@@ -137,6 +137,18 @@ def test_exclude_categories_input(call):
     assert dropped == "highres"
 
 
+def test_sort_tags_on_by_default(call):
+    body = {"choices": [{"message": {"content": "night, hatsune miku, 1girl"}}]}
+    (prompt, _), _ = call(body)
+    assert prompt == "1girl, hatsune miku, night"
+
+
+def test_sort_tags_off_preserves_llm_order(call):
+    body = {"choices": [{"message": {"content": "night, 1girl"}}]}
+    (prompt, _), _ = call(body, sort_tags=False)
+    assert prompt == "night, 1girl"
+
+
 # --- template ----------------------------------------------------------------
 
 def test_template_placeholder(call):
@@ -147,6 +159,24 @@ def test_template_placeholder(call):
 def test_template_without_placeholder_appends(call):
     (prompt, _), _ = call(CONTENT, prompt_template="masterpiece, best quality")
     assert prompt == "masterpiece, best quality, 1girl, beach, smile"
+
+
+def test_template_preset_overrides_field(call):
+    (prompt, _), _ = call(CONTENT, template_preset="pony",
+                          prompt_template="ignored {prompt}")
+    assert prompt.startswith("score_9, score_8_up")
+    assert "ignored" not in prompt
+
+
+def test_template_preset_custom_uses_field(call):
+    (prompt, _), _ = call(CONTENT, template_preset="custom",
+                          prompt_template="X, {prompt}")
+    assert prompt == "X, 1girl, beach, smile"
+
+
+def test_all_presets_have_placeholder(node_module):
+    for name, template in node_module.TEMPLATE_PRESETS.items():
+        assert "{prompt}" in template, name
 
 
 def test_parse_categories(node_module):

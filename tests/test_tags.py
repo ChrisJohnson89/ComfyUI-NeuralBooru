@@ -41,6 +41,17 @@ def test_resolve_morphological_variants(db):
     assert db.resolve("cats") == "cat"
 
 
+def test_resolve_singular_to_plural(db):
+    assert db.resolve("blue eye") == "blue_eyes"
+    assert db.resolve("golden eye") == "yellow_eyes"  # via golden_eyes alias
+
+
+def test_resolve_merged_tag_aliases(db):
+    # danbooru merged silver_hair into grey_hair; CSV lost the alias
+    assert db.resolve("silver hair") == "grey_hair"
+    assert db.resolve("golden hair") == "blonde_hair"
+
+
 def test_resolve_trailing_s_typo_via_morph(db):
     # "eyess" is caught by the -s/-es stemmer, no fuzzy needed
     assert db.resolve("blue eyess") == "blue_eyes"

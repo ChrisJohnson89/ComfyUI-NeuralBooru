@@ -17,6 +17,15 @@ import difflib
 
 _DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "danbooru.csv")
 
+# Historic Danbooru tag merges the tagcomplete CSV no longer carries as
+# aliases, but that LLMs (and users) still produce constantly. Applied on
+# load; each target must exist in the vocabulary or the entry is ignored.
+EXTRA_ALIASES = {
+    "silver_hair": "grey_hair",
+    "silver_eyes": "grey_eyes",
+    "golden_hair": "blonde_hair",
+}
+
 # Danbooru category codes
 CATEGORY_NAMES = {
     0: "general",
@@ -58,8 +67,9 @@ def _morph_variants(norm):
     """Candidate stems for a word that did not resolve directly.
 
     Handles common verb/plural forms: smirking->smirk, posing->pose,
-    crossed->cross, cats->cat. Conservative: only the last token is stemmed
-    and very short stems are skipped to avoid false hits.
+    crossed->cross, cats->cat, and singulars: blue eye->blue eyes.
+    Conservative: only the last token is changed and very short stems are
+    skipped to avoid false hits.
     """
     out = []
     if "_" in norm:  # only stem the final word of a phrase
@@ -71,6 +81,8 @@ def _morph_variants(norm):
                       ("es", ""), ("s", "")):
         if tail.endswith(suf) and len(tail) - len(suf) >= 3:
             out.append(prefix + tail[:-len(suf)] + repl)
+    if not tail.endswith("s") and len(tail) >= 3:  # singular -> plural
+        out.append(prefix + tail + "s")
     return out
 
 
@@ -115,6 +127,9 @@ class TagDB:
                         # real tags win over aliases; first alias wins ties
                         if a and a not in self.canonical and a not in self.alias:
                             self.alias[a] = norm
+        for a, canon in EXTRA_ALIASES.items():
+            if canon in self.canonical and a not in self.canonical:
+                self.alias.setdefault(a, canon)
 
     def __len__(self):
         return len(self.canonical)

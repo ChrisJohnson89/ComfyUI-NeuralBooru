@@ -1,8 +1,8 @@
 {
   "id": "9a40225d-8800-48d7-8878-b35c3c226454",
   "revision": 0,
-  "last_node_id": 9,
-  "last_link_id": 11,
+  "last_node_id": 11,
+  "last_link_id": 13,
   "nodes": [
     {
       "id": 1,
@@ -197,13 +197,28 @@
       ],
       "outputs": [
         {
-          "localized_name": "prompt",
           "name": "prompt",
           "type": "STRING",
-          "slot_index": 0,
           "links": [
             5
-          ]
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "dropped_tags",
+          "type": "STRING",
+          "links": [
+            13
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "tags",
+          "type": "STRING",
+          "links": [
+            12
+          ],
+          "slot_index": 2
         }
       ],
       "properties": {
@@ -605,6 +620,62 @@
       "widgets_values": [
         "ComfyUI"
       ]
+    },
+    {
+      "id": 10,
+      "type": "PreviewAny",
+      "title": "Tags (validated)",
+      "pos": [
+        -218.19260426109258,
+        -837.6651006220491
+      ],
+      "size": [
+        420,
+        220
+      ],
+      "flags": {},
+      "order": 60,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 12
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 11,
+      "type": "PreviewAny",
+      "title": "Dropped tags",
+      "pos": [
+        -218.19260426109258,
+        -577.6651006220491
+      ],
+      "size": [
+        420,
+        220
+      ],
+      "flags": {},
+      "order": 61,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 13
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": []
     }
   ],
   "links": [
@@ -695,6 +766,22 @@
       9,
       0,
       "IMAGE"
+    ],
+    [
+      12,
+      3,
+      2,
+      10,
+      0,
+      "STRING"
+    ],
+    [
+      13,
+      3,
+      1,
+      11,
+      0,
+      "STRING"
     ]
   ],
   "groups": [

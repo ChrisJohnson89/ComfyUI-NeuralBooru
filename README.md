@@ -150,8 +150,12 @@ Tag validation is on by default. Check the ComfyUI console for a `[NeuralBooru] 
 ## Node Parameters
 
 <p align="center">
-  <img src="images/node.png" alt="The NeuralBooru node with its inputs, widgets, and outputs" width="420">
+  <img src="images/node.png" alt="The NeuralBooru node with its outputs wired to two preview panels showing validated tags and dropped tags" width="720">
 </p>
+
+The included example workflow wires the `tags` and `dropped_tags` outputs to
+two core **PreviewAny** nodes, so every run shows exactly which tags survived
+validation and which candidates were filtered, right next to the graph.
 
 | Parameter | Default | Description |
 |---|---|---|

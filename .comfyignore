@@ -1,0 +1,7 @@
+# Excluded from the registry package: dev/offline tooling not needed at
+# runtime. The node itself needs only __init__.py, tags.py, and data/.
+finetune/
+tests/
+.github/
+.gitignore
+.comfyignore

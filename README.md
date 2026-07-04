@@ -182,6 +182,7 @@ Tag validation is on by default. Check the ComfyUI console for a `[NeuralBooru] 
 |---|---|
 | `prompt` | The validated, template-wrapped prompt for your CLIP encoder |
 | `dropped_tags` | Comma-separated list of candidates that were filtered out |
+| `tags` | The validated tags alone, without the template (display, metadata, custom wrapping) |
 
 ### Prompt Template
 

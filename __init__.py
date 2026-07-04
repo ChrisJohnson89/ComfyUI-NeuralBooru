@@ -162,8 +162,13 @@ class NeuralBooru:
             }
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("prompt", "dropped_tags")
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("prompt", "dropped_tags", "tags")
+    OUTPUT_TOOLTIPS = (
+        "Validated tags wrapped in the prompt template, for your CLIP encoder.",
+        "Candidates that failed validation, comma-separated.",
+        "The validated tags alone, without the template.",
+    )
     FUNCTION = "generate"
     CATEGORY = "NeuralBooru"
     OUTPUT_NODE = False
@@ -261,7 +266,7 @@ class NeuralBooru:
             print(f"[NeuralBooru] {final[:160]}...")
             if dropped:
                 print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
-            return (final, ", ".join(dropped))
+            return (final, ", ".join(dropped), tags)
 
         except urllib.error.HTTPError as e:
             return self._fail(
@@ -298,7 +303,7 @@ class NeuralBooru:
         if on_error == "raise":
             raise RuntimeError(f"NeuralBooru: {msg}") from exc
         print(f"[NeuralBooru] {msg} - falling back to raw input text")
-        return (_apply_template(prompt_template, user_prompt), "")
+        return (_apply_template(prompt_template, user_prompt), "", user_prompt)
 
     def _validate(self, text, enabled, strict, fuzzy_cutoff,
                   min_post_count, max_tags, exclude=(), sort_tags=False):

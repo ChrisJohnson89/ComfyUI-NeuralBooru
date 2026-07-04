@@ -75,8 +75,8 @@ CONTENT = {"choices": [{"message": {"content": "1girl, beach, smile"}}]}
 # --- Ollama native path -------------------------------------------------------
 
 def test_ollama_uses_native_api_with_think_control(call):
-    (prompt, _), req = call({"message": {"content": "1girl, beach, smile"}},
-                            ollama=True)
+    (prompt, *_), req = call({"message": {"content": "1girl, beach, smile"}},
+                             ollama=True)
     assert req["url"].endswith("/api/chat")
     p = req["payload"]
     assert p["think"] is False
@@ -86,7 +86,7 @@ def test_ollama_uses_native_api_with_think_control(call):
 
 def test_ollama_thinking_field_fallback(call):
     body = {"message": {"content": "", "thinking": "1girl, beach"}}
-    (prompt, _), _ = call(body, ollama=True)
+    (prompt, *_), _ = call(body, ollama=True)
     assert prompt == "1girl, beach"
 
 
@@ -108,7 +108,7 @@ def test_ollama_think_rejected_retries_without(node_module, monkeypatch):
 
     node_module.NeuralBooru._OLLAMA_CACHE.clear()
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    prompt, _ = node_module.NeuralBooru().generate(**base_kwargs(node_module))
+    prompt, *_ = node_module.NeuralBooru().generate(**base_kwargs(node_module))
     assert prompt == "1girl, beach"
     assert len(payloads) == 2 and "think" not in payloads[1]
 
@@ -121,7 +121,7 @@ def test_non_ollama_uses_openai_endpoint(call):
 # --- request shape ----------------------------------------------------------
 
 def test_payload_basics(call):
-    (prompt, dropped), req = call(CONTENT)
+    (prompt, dropped, *_), req = call(CONTENT)
     p = req["payload"]
     assert p["model"] == "test-model"
     assert p["seed"] == 42
@@ -154,7 +154,7 @@ def test_no_auth_header_when_api_key_blank(call):
 def test_think_block_stripped(call):
     body = {"choices": [{"message": {
         "content": "<think>beach... girl...</think>1girl, beach"}}]}
-    (prompt, _), _ = call(body)
+    (prompt, *_), _ = call(body)
     assert prompt == "1girl, beach"
 
 
@@ -162,7 +162,7 @@ def test_unclosed_think_block_stripped(call):
     # regression: max_tokens truncation used to leak reasoning into the prompt
     body = {"choices": [{"message": {
         "content": "<think>okay the user wants a girl on a beach so"}}]}
-    (prompt, _), _ = call(body)
+    (prompt, *_), _ = call(body)
     assert "the user wants" not in prompt
 
 
@@ -170,65 +170,78 @@ def test_ollama_reasoning_fallback(call):
     # issue #1: Ollama leaves content empty, output lands in reasoning
     body = {"choices": [{"message": {
         "content": "", "reasoning": "1girl, beach, ocean"}}]}
-    (prompt, _), _ = call(body)
+    (prompt, *_), _ = call(body)
     assert prompt == "1girl, beach, ocean"
 
 
 def test_null_content_reasoning_content_fallback(call):
     body = {"choices": [{"message": {
         "content": None, "reasoning_content": "1girl, night"}}]}
-    (prompt, _), _ = call(body)
+    (prompt, *_), _ = call(body)
     assert prompt == "1girl, night"
 
 
 def test_validation_drops_junk_and_reports(call):
     body = {"choices": [{"message": {
         "content": "1girl, complete gibberish qzx, beach"}}]}
-    (prompt, dropped), _ = call(body)
+    (prompt, dropped, *_), _ = call(body)
     assert prompt == "1girl, beach"
     assert dropped == "complete gibberish qzx"
 
 
 def test_exclude_categories_input(call):
     body = {"choices": [{"message": {"content": "1girl, highres"}}]}
-    (prompt, dropped), _ = call(body, exclude_categories="meta")
+    (prompt, dropped, *_), _ = call(body, exclude_categories="meta")
     assert prompt == "1girl"
     assert dropped == "highres"
 
 
 def test_sort_tags_on_by_default(call):
     body = {"choices": [{"message": {"content": "night, hatsune miku, 1girl"}}]}
-    (prompt, _), _ = call(body)
+    (prompt, *_), _ = call(body)
     assert prompt == "1girl, hatsune miku, night"
 
 
 def test_sort_tags_off_preserves_llm_order(call):
     body = {"choices": [{"message": {"content": "night, 1girl"}}]}
-    (prompt, _), _ = call(body, sort_tags=False)
+    (prompt, *_), _ = call(body, sort_tags=False)
     assert prompt == "night, 1girl"
+
+
+def test_tags_output_is_untemplated(call):
+    (prompt, dropped, tags), _ = call(
+        CONTENT, prompt_template="quality, {prompt}, BREAK")
+    assert prompt == "quality, 1girl, beach, smile, BREAK"
+    assert tags == "1girl, beach, smile"
+
+
+def test_tags_output_on_error_fallback(call):
+    (_, _, tags), _ = call(None, exc=urllib.error.URLError("refused"),
+                           on_error="use_input_text")
+    assert tags == "a girl on a beach"
 
 
 # --- template ----------------------------------------------------------------
 
 def test_template_placeholder(call):
-    (prompt, _), _ = call(CONTENT, prompt_template="quality, {prompt}, BREAK")
+    (prompt, *_), _ = call(CONTENT, prompt_template="quality, {prompt}, BREAK")
     assert prompt == "quality, 1girl, beach, smile, BREAK"
 
 
 def test_template_without_placeholder_appends(call):
-    (prompt, _), _ = call(CONTENT, prompt_template="masterpiece, best quality")
+    (prompt, *_), _ = call(CONTENT, prompt_template="masterpiece, best quality")
     assert prompt == "masterpiece, best quality, 1girl, beach, smile"
 
 
 def test_template_preset_overrides_field(call):
-    (prompt, _), _ = call(CONTENT, template_preset="pony",
+    (prompt, *_), _ = call(CONTENT, template_preset="pony",
                           prompt_template="ignored {prompt}")
     assert prompt.startswith("score_9, score_8_up")
     assert "ignored" not in prompt
 
 
 def test_template_preset_custom_uses_field(call):
-    (prompt, _), _ = call(CONTENT, template_preset="custom",
+    (prompt, *_), _ = call(CONTENT, template_preset="custom",
                           prompt_template="X, {prompt}")
     assert prompt == "X, 1girl, beach, smile"
 
@@ -259,7 +272,7 @@ def test_http_error_includes_status_and_body(call):
 
 
 def test_on_error_use_input_text_falls_back(call):
-    (prompt, dropped), _ = call(
+    (prompt, dropped, *_), _ = call(
         None, exc=urllib.error.URLError("refused"),
         on_error="use_input_text",
         prompt_template="quality, {prompt}")

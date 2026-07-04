@@ -122,14 +122,18 @@ Your template (the quality boosters like `masterpiece, best quality`) is never v
 
 ## Installation
 
-**Via ComfyUI Manager** (recommended):
+**Via ComfyUI Manager** (recommended, stable releases):
 Search for `NeuralBooru` in the Custom Nodes section.
 
-**Manual:**
+**Manual (latest features, may be ahead of the registry):**
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/ChrisJohnson89/ComfyUI-NeuralBooru
 ```
+
+New features land on `main` first and are batched into registry releases
+once proven. If you want what the README describes the moment it merges,
+use the manual install and `git pull` to update.
 
 Restart ComfyUI. The **NeuralBooru** node will appear under the `NeuralBooru` category.
 

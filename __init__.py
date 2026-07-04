@@ -175,7 +175,7 @@ class NeuralBooru:
                  exclude_categories="", on_error="raise",
                  template_preset="custom", sort_tags=True):
 
-        url = lm_studio_url.rstrip("/") + "/v1/chat/completions"
+        base = lm_studio_url.rstrip("/")
         prompt_template = TEMPLATE_PRESETS.get(template_preset, prompt_template)
 
         if enable_thinking:
@@ -183,70 +183,90 @@ class NeuralBooru:
             # the default system prompt
             system_prompt = re.sub(r"\s*/no_think\s*$", "", system_prompt)
 
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "seed": seed,
-            "stream": False,
-        }
-        if not enable_thinking:
-            # honored by Ollama for Qwen3-style models; ignored elsewhere
-            payload["enable_thinking"] = False
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ]
 
         headers = {"Content-Type": "application/json"}
         if api_key.strip():
             headers["Authorization"] = "Bearer " + api_key.strip()
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers=headers,
-            method="POST",
-        )
+        if self._is_ollama(base):
+            # Ollama's OpenAI-compatible endpoint ignores thinking control,
+            # so reasoning models ramble into (or instead of) the answer.
+            # Its native API honors "think", so use that when we can.
+            url = base + "/api/chat"
+            payload = {
+                "model": model,
+                "messages": messages,
+                "think": bool(enable_thinking),
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                    "seed": seed,
+                },
+            }
+        else:
+            url = base + "/v1/chat/completions"
+            payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "seed": seed,
+                "stream": False,
+            }
+            if not enable_thinking:
+                payload["enable_thinking"] = False
 
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                msg = result["choices"][0]["message"]
-                text = (msg.get("content") or "").strip()
-                if not text:
-                    # Ollama (and DeepSeek-style servers) put reasoning-model
-                    # output in a separate field, leaving content empty; the
-                    # think-strip and validator below clean it up (issue #1)
-                    text = (msg.get("reasoning") or
-                            msg.get("reasoning_content") or "").strip()
+            try:
+                result = _post_json(url, payload, headers, timeout)
+            except urllib.error.HTTPError as e:
+                # models without a thinking mode can reject the think flag;
+                # retry once without it
+                if ("think" in payload and e.code == 400
+                        and "think" in _http_error_detail(e).lower()):
+                    payload.pop("think")
+                    result = _post_json(url, payload, headers, timeout)
+                else:
+                    raise
 
-                # Strip <think>...</think> blocks (Qwen3 reasoning mode).
-                # An unterminated block (max_tokens cut off mid-reasoning) is
-                # stripped to end of string so reasoning never leaks into tags.
-                if "<think>" in text:
-                    text = re.sub(r"<think>.*?(?:</think>|$)", "", text,
-                                  flags=re.DOTALL).strip()
+            # Ollama native: {"message": {...}}; OpenAI-style: {"choices": [...]}
+            msg = (result["message"] if "message" in result
+                   else result["choices"][0]["message"])
+            text = (msg.get("content") or "").strip()
+            if not text:
+                # reasoning-model output can land in a separate field,
+                # leaving content empty; the think-strip and validator
+                # below clean it up (issue #1)
+                text = (msg.get("thinking") or msg.get("reasoning") or
+                        msg.get("reasoning_content") or "").strip()
 
-                tags, dropped = self._validate(
-                    text, validate_tags, strict_tags,
-                    fuzzy_cutoff, min_post_count, max_tags,
-                    _parse_categories(exclude_categories), sort_tags)
+            # Strip <think>...</think> blocks (Qwen3 reasoning mode).
+            # An unterminated block (max_tokens cut off mid-reasoning) is
+            # stripped to end of string so reasoning never leaks into tags.
+            if "<think>" in text:
+                text = re.sub(r"<think>.*?(?:</think>|$)", "", text,
+                              flags=re.DOTALL).strip()
 
-                final = _apply_template(prompt_template, tags)
-                print(f"[NeuralBooru] {final[:160]}...")
-                if dropped:
-                    print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
-                return (final, ", ".join(dropped))
+            tags, dropped = self._validate(
+                text, validate_tags, strict_tags,
+                fuzzy_cutoff, min_post_count, max_tags,
+                _parse_categories(exclude_categories), sort_tags)
+
+            final = _apply_template(prompt_template, tags)
+            print(f"[NeuralBooru] {final[:160]}...")
+            if dropped:
+                print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
+            return (final, ", ".join(dropped))
 
         except urllib.error.HTTPError as e:
-            try:
-                detail = e.read().decode("utf-8", "replace")[:300]
-            except Exception:
-                detail = ""
-            return self._fail(f"Server returned HTTP {e.code}: {detail}",
-                              on_error, prompt_template, user_prompt, e)
+            return self._fail(
+                f"Server returned HTTP {e.code}: {_http_error_detail(e)}",
+                on_error, prompt_template, user_prompt, e)
         except urllib.error.URLError as e:
             return self._fail(
                 f"Could not reach the LLM server at {lm_studio_url} ({e.reason}). "
@@ -254,6 +274,23 @@ class NeuralBooru:
         except Exception as e:
             return self._fail(f"Unexpected error: {e}",
                               on_error, prompt_template, user_prompt, e)
+
+    # base URL -> bool, probed once per server per session
+    _OLLAMA_CACHE = {}
+
+    def _is_ollama(self, base):
+        """Detect an Ollama server by its native /api/version endpoint.
+        LM Studio and other OpenAI-compatible servers 404 this instantly."""
+        cached = self._OLLAMA_CACHE.get(base)
+        if cached is not None:
+            return cached
+        try:
+            with urllib.request.urlopen(base + "/api/version", timeout=5):
+                found = True
+        except Exception:
+            found = False
+        self._OLLAMA_CACHE[base] = found
+        return found
 
     def _fail(self, msg, on_error, prompt_template, user_prompt, exc):
         """Surface an LLM failure per on_error: raise it, or fall back to
@@ -285,6 +322,25 @@ class NeuralBooru:
             sort_tags=sort_tags,
         )
         return prompt, dropped
+
+
+def _post_json(url, payload, headers, timeout):
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _http_error_detail(e):
+    """Best-effort response body from an HTTPError (readable only once)."""
+    try:
+        return e.read().decode("utf-8", "replace")[:300]
+    except Exception:
+        return ""
 
 
 def _apply_template(template, prompt):

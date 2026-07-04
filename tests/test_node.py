@@ -22,14 +22,37 @@ class FakeResponse:
         return False
 
 
+def base_kwargs(node_module):
+    return dict(
+        user_prompt="a girl on a beach",
+        system_prompt=node_module.DEFAULT_SYSTEM_PROMPT,
+        prompt_template="{prompt}",
+        model="test-model",
+        enable_thinking=False,
+        temperature=0.4,
+        max_tokens=500,
+        seed=42,
+        lm_studio_url="http://localhost:1234",
+    )
+
+
 @pytest.fixture
 def call(node_module, monkeypatch):
     """Run node.generate against a canned response; returns (output, request
-    capture dict). Usage: out, req = call(response_body, **overrides)."""
-    def _call(body, exc=None, **overrides):
+    capture dict). Usage: out, req = call(response_body, **overrides).
+    Pass ollama=True to emulate an Ollama server (probe answers, native API)."""
+    def _call(body, exc=None, ollama=False, **overrides):
         captured = {}
+        node_module.NeuralBooru._OLLAMA_CACHE.clear()
 
         def fake_urlopen(req, timeout=None):
+            url = req if isinstance(req, str) else req.full_url
+            if url.endswith("/api/version"):  # the Ollama probe (GET)
+                if ollama:
+                    return FakeResponse({"version": "0.0.0-test"})
+                raise urllib.error.HTTPError(url, 404, "Not Found", {},
+                                             io.BytesIO(b""))
+            captured["url"] = url
             captured["timeout"] = timeout
             captured["headers"] = dict(req.headers)
             captured["payload"] = json.loads(req.data.decode("utf-8"))
@@ -38,17 +61,7 @@ def call(node_module, monkeypatch):
             return FakeResponse(body)
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        kwargs = dict(
-            user_prompt="a girl on a beach",
-            system_prompt=node_module.DEFAULT_SYSTEM_PROMPT,
-            prompt_template="{prompt}",
-            model="test-model",
-            enable_thinking=False,
-            temperature=0.4,
-            max_tokens=500,
-            seed=42,
-            lm_studio_url="http://localhost:1234",
-        )
+        kwargs = base_kwargs(node_module)
         kwargs.update(overrides)
         out = node_module.NeuralBooru().generate(**kwargs)
         return out, captured
@@ -57,6 +70,52 @@ def call(node_module, monkeypatch):
 
 
 CONTENT = {"choices": [{"message": {"content": "1girl, beach, smile"}}]}
+
+
+# --- Ollama native path -------------------------------------------------------
+
+def test_ollama_uses_native_api_with_think_control(call):
+    (prompt, _), req = call({"message": {"content": "1girl, beach, smile"}},
+                            ollama=True)
+    assert req["url"].endswith("/api/chat")
+    p = req["payload"]
+    assert p["think"] is False
+    assert p["options"] == {"temperature": 0.4, "num_predict": 500, "seed": 42}
+    assert prompt == "1girl, beach, smile"
+
+
+def test_ollama_thinking_field_fallback(call):
+    body = {"message": {"content": "", "thinking": "1girl, beach"}}
+    (prompt, _), _ = call(body, ollama=True)
+    assert prompt == "1girl, beach"
+
+
+def test_ollama_think_rejected_retries_without(node_module, monkeypatch):
+    # models with no thinking mode 400 on the think flag; retry drops it
+    payloads = []
+
+    def fake_urlopen(req, timeout=None):
+        url = req if isinstance(req, str) else req.full_url
+        if url.endswith("/api/version"):
+            return FakeResponse({"version": "0.0.0-test"})
+        p = json.loads(req.data.decode("utf-8"))
+        payloads.append(p)
+        if "think" in p:
+            raise urllib.error.HTTPError(
+                url, 400, "Bad Request", {},
+                io.BytesIO(b'{"error":"\\"test-model\\" does not support thinking"}'))
+        return FakeResponse({"message": {"content": "1girl, beach"}})
+
+    node_module.NeuralBooru._OLLAMA_CACHE.clear()
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    prompt, _ = node_module.NeuralBooru().generate(**base_kwargs(node_module))
+    assert prompt == "1girl, beach"
+    assert len(payloads) == 2 and "think" not in payloads[1]
+
+
+def test_non_ollama_uses_openai_endpoint(call):
+    _, req = call(CONTENT)
+    assert req["url"].endswith("/v1/chat/completions")
 
 
 # --- request shape ----------------------------------------------------------

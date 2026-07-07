@@ -234,5 +234,3 @@ Tag data is derived from the Danbooru tag list distributed with
 ## License
 
 MIT - do whatever you want with it.
-
-![Example 2](images/example2.png)

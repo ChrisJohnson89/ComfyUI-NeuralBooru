@@ -385,3 +385,13 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "NeuralBooru": "NeuralBooru",
 }
+
+try:
+    from .llm_node import NeuralBooruLLM
+    from .validator_node import NeuralBooruValidator
+    NODE_CLASS_MAPPINGS["NeuralBooruLLM"] = NeuralBooruLLM
+    NODE_CLASS_MAPPINGS["NeuralBooruValidator"] = NeuralBooruValidator
+    NODE_DISPLAY_NAME_MAPPINGS["NeuralBooruLLM"] = "NeuralBooru LLM"
+    NODE_DISPLAY_NAME_MAPPINGS["NeuralBooruValidator"] = "NeuralBooru Validator"
+except ImportError:
+    pass

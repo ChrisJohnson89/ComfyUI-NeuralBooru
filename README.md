@@ -135,7 +135,7 @@ New features land on `main` first and are batched into registry releases
 once proven. If you want what the README describes the moment it merges,
 use the manual install and `git pull` to update.
 
-Restart ComfyUI. The **NeuralBooru** node will appear under the `NeuralBooru` category.
+Restart ComfyUI. The **NeuralBooru** node appears under the `NeuralBooru` category, along with the **NeuralBooru LLM** and **NeuralBooru Validator** split nodes (see below).
 
 ---
 
@@ -191,6 +191,32 @@ validation and which candidates were filtered, right next to the graph.
 | `prompt` | The validated, template-wrapped prompt for your CLIP encoder |
 | `dropped_tags` | Comma-separated list of candidates that were filtered out |
 | `tags` | The validated tags alone, without the template (display, metadata, custom wrapping) |
+
+### Split nodes: NeuralBooru LLM + NeuralBooru Validator
+
+The all-in-one node above is the easiest way to run the pipeline, but the two
+halves are also available as separate nodes (contributed by
+[@greeze](https://github.com/greeze)):
+
+- **NeuralBooru LLM** talks to your LLM server and outputs `raw_tags` (the
+  cleaned, think-stripped model output) plus an `is_fallback` flag that goes
+  `True` when the call failed and `on_error=use_input_text` passed your
+  description through.
+- **NeuralBooru Validator** takes comma-separated tags, validates them
+  against the Danbooru vocabulary, and applies the template. It has the same
+  `prompt` / `dropped_tags` / `tags` outputs as the combined node.
+
+Wire `raw_tags -> tags` and `is_fallback -> is_fallback` and the pair behaves
+exactly like the original node (internally, the combined node runs these two).
+Split them when you want to:
+
+- see or edit the raw LLM output before validation
+- validate hand-typed or externally generated tags with no LLM involved
+- run one LLM call through several validator configs (different templates,
+  strictness, or category filters)
+
+The included `workflows/AI_Anime_split.json` is the example workflow rebuilt
+on the split nodes.
 
 ### Prompt Template
 

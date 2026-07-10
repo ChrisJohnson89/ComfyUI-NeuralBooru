@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-neuralbooru"
 description = "Turn natural language into validated Danbooru tags using a local LLM"
-version = "1.3.1"
+version = "1.4.0"
 license = {file = "LICENSE"}
 dependencies = []
 

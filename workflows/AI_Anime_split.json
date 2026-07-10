@@ -645,7 +645,10 @@
         2000,
         0,
         "randomize",
-        "http://localhost:1234"
+        "http://localhost:1234",
+        120,
+        "",
+        "raise"
       ]
     },
     {

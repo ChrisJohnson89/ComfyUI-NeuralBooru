@@ -1,13 +1,22 @@
 # CLAUDE.md
 
-ComfyUI custom node: English scene description -> LLM -> validated Danbooru
+ComfyUI custom nodes: English scene description -> LLM -> validated Danbooru
 tags -> templated prompt. Works with any OpenAI-compatible server; Ollama is
-auto-detected and driven through its native API instead.
+auto-detected and driven through its native API instead. Three nodes:
+`NeuralBooru` (all-in-one), plus the `NeuralBooruLLM` -> `NeuralBooruValidator`
+split pair that together reproduce it.
 
 ## Layout
 
-- `__init__.py` - the node (single class `NeuralBooru`), HTTP client, template
-  presets. Loaded by ComfyUI as a package; also importable standalone.
+- `__init__.py` - the combined `NeuralBooru` node, HTTP client, template
+  presets, node registration. Loaded by ComfyUI as a package; also importable
+  standalone. `NeuralBooru.generate()` is a thin wrapper that delegates to
+  the two split nodes - it contains no pipeline logic of its own.
+- `llm_node.py` - `NeuralBooruLLM`: the LLM call (Ollama native + OpenAI
+  paths, think handling, reasoning-field fallback). THE single home of the
+  HTTP pipeline; server-quirk fixes go here and nowhere else.
+- `validator_node.py` - `NeuralBooruValidator`: tag validation + template
+  application on top of `tags.py`.
 - `tags.py` - tag validator (exact -> alias -> stemming -> sub-phrase salvage
   -> optional fuzzy -> drop, then optional Danbooru-order sort). Pure,
   dependency-free, and the most test-covered code here.
@@ -19,15 +28,24 @@ auto-detected and driven through its native API instead.
   It loads `DEFAULT_SYSTEM_PROMPT` from `__init__.py` by path so training
   always matches inference. Generated data under `finetune/data/` is
   gitignored.
-- `workflows/AI_Anime.json` - example workflow shipped to users.
+- `workflows/AI_Anime.json` - example workflow shipped to users
+  (combined node); `AI_Anime_split.json` - same workflow on the split pair.
 
 ## Hard constraints
 
-- **The node stays pure stdlib.** Zero dependencies is a shipped feature.
-  Never add imports beyond the standard library to `__init__.py` or `tags.py`.
+- **The nodes stay pure stdlib.** Zero dependencies is a shipped feature.
+  Never add imports beyond the standard library to `__init__.py`,
+  `llm_node.py`, `validator_node.py`, or `tags.py`.
 - **ComfyUI restores `widgets_values` by position.** Never insert or reorder
-  entries in `INPUT_TYPES`; add new inputs at the END of the `optional` group,
-  and update `workflows/AI_Anime.json`'s widget list in the same commit.
+  entries in any node's `INPUT_TYPES`; add new inputs at the END of the
+  `optional` group, and update the affected workflow JSON's widget list
+  (`AI_Anime.json` for `NeuralBooru`, `AI_Anime_split.json` for the split
+  nodes) in the same commit.
+- **No duplicated pipeline logic.** The combined node delegates to
+  `NeuralBooruLLM` + `NeuralBooruValidator`; never re-add a second copy of
+  the HTTP/validation code, and keep the combined node behaviorally identical
+  to the wired split pair (a shared `_OLLAMA_CACHE` in `__init__.py` means
+  one server probe per session across all nodes).
 - **`DEFAULT_SYSTEM_PROMPT` is a single source of truth.** The finetune cache
   stamps records with its hash; editing it invalidates cached training pairs
   (by design). Do not duplicate the prompt anywhere.

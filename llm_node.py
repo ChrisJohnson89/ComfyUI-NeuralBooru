@@ -10,14 +10,14 @@ the two nodes reproduce the original NeuralBooru node exactly.
 """
 
 import re
-import urllib.request
 import urllib.error
 
 try:
-    from . import (DEFAULT_SYSTEM_PROMPT, _post_json, _http_error_detail)
+    from . import (DEFAULT_SYSTEM_PROMPT, _post_json, _http_error_detail,
+                   _is_ollama, _OLLAMA_CACHE)
 except ImportError:
     from neuralbooru import (DEFAULT_SYSTEM_PROMPT, _post_json,
-                             _http_error_detail)
+                             _http_error_detail, _is_ollama, _OLLAMA_CACHE)
 
 
 class NeuralBooruLLM:
@@ -178,25 +178,6 @@ class NeuralBooruLLM:
                 f"Is it running?", on_error, user_prompt, e)
         except Exception as e:
             return _fail(f"Unexpected error: {e}", on_error, user_prompt, e)
-
-
-# Module-level Ollama detection (avoids touching the original NeuralBooru class)
-_OLLAMA_CACHE = {}
-
-
-def _is_ollama(base):
-    """Detect an Ollama server by its native /api/version endpoint.
-    LM Studio and other OpenAI-compatible servers 404 this instantly."""
-    cached = _OLLAMA_CACHE.get(base)
-    if cached is not None:
-        return cached
-    try:
-        with urllib.request.urlopen(base + "/api/version", timeout=5):
-            found = True
-    except Exception:
-        found = False
-    _OLLAMA_CACHE[base] = found
-    return found
 
 
 def _fail(msg, on_error, user_prompt, exc):

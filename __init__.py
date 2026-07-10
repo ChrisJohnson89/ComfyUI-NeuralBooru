@@ -6,9 +6,7 @@ Default endpoint: http://localhost:1234/v1/chat/completions
 """
 
 import json
-import re
 import urllib.request
-import urllib.error
 
 try:
     from . import tags as tagdb
@@ -51,6 +49,26 @@ DEFAULT_SYSTEM_PROMPT = (
     "serious, outdoors\n"
     "Now output tags only for the next description. /no_think"
 )
+
+
+# base URL -> bool, probed once per server per session. Shared with
+# llm_node so the combined and split nodes never probe twice.
+_OLLAMA_CACHE = {}
+
+
+def _is_ollama(base):
+    """Detect an Ollama server by its native /api/version endpoint.
+    LM Studio and other OpenAI-compatible servers 404 this instantly."""
+    cached = _OLLAMA_CACHE.get(base)
+    if cached is not None:
+        return cached
+    try:
+        with urllib.request.urlopen(base + "/api/version", timeout=5):
+            found = True
+    except Exception:
+        found = False
+    _OLLAMA_CACHE[base] = found
+    return found
 
 
 class NeuralBooru:
@@ -173,160 +191,31 @@ class NeuralBooru:
     CATEGORY = "NeuralBooru"
     OUTPUT_NODE = False
 
+    # legacy alias: tests and old code reach the probe cache through the class
+    _OLLAMA_CACHE = _OLLAMA_CACHE
+
     def generate(self, user_prompt, system_prompt, prompt_template, model,
                  enable_thinking, temperature, max_tokens, seed, lm_studio_url,
                  validate_tags=True, strict_tags=True, fuzzy_cutoff=0.0,
                  min_post_count=0, max_tags=0, timeout=120, api_key="",
                  exclude_categories="", on_error="raise",
                  template_preset="custom", sort_tags=True):
-
-        base = lm_studio_url.rstrip("/")
-        prompt_template = TEMPLATE_PRESETS.get(template_preset, prompt_template)
-
-        if enable_thinking:
-            # let the switch win over the /no_think soft switch baked into
-            # the default system prompt
-            system_prompt = re.sub(r"\s*/no_think\s*$", "", system_prompt)
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_prompt},
-        ]
-
-        headers = {"Content-Type": "application/json"}
-        if api_key.strip():
-            headers["Authorization"] = "Bearer " + api_key.strip()
-
-        if self._is_ollama(base):
-            # Ollama's OpenAI-compatible endpoint ignores thinking control,
-            # so reasoning models ramble into (or instead of) the answer.
-            # Its native API honors "think", so use that when we can.
-            url = base + "/api/chat"
-            payload = {
-                "model": model,
-                "messages": messages,
-                "think": bool(enable_thinking),
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
-                    "seed": seed,
-                },
-            }
-        else:
-            url = base + "/v1/chat/completions"
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "seed": seed,
-                "stream": False,
-            }
-            if not enable_thinking:
-                payload["enable_thinking"] = False
-
+        # Thin wrapper over the split nodes; the LLM and validation logic
+        # live only in llm_node.py / validator_node.py.
         try:
-            try:
-                result = _post_json(url, payload, headers, timeout)
-            except urllib.error.HTTPError as e:
-                # models without a thinking mode can reject the think flag;
-                # retry once without it
-                if ("think" in payload and e.code == 400
-                        and "think" in _http_error_detail(e).lower()):
-                    payload.pop("think")
-                    result = _post_json(url, payload, headers, timeout)
-                else:
-                    raise
-
-            # Ollama native: {"message": {...}}; OpenAI-style: {"choices": [...]}
-            msg = (result["message"] if "message" in result
-                   else result["choices"][0]["message"])
-            text = (msg.get("content") or "").strip()
-            if not text:
-                # reasoning-model output can land in a separate field,
-                # leaving content empty; the think-strip and validator
-                # below clean it up (issue #1)
-                text = (msg.get("thinking") or msg.get("reasoning") or
-                        msg.get("reasoning_content") or "").strip()
-
-            # Strip <think>...</think> blocks (Qwen3 reasoning mode).
-            # An unterminated block (max_tokens cut off mid-reasoning) is
-            # stripped to end of string so reasoning never leaks into tags.
-            if "<think>" in text:
-                text = re.sub(r"<think>.*?(?:</think>|$)", "", text,
-                              flags=re.DOTALL).strip()
-
-            tags, dropped = self._validate(
-                text, validate_tags, strict_tags,
-                fuzzy_cutoff, min_post_count, max_tags,
-                _parse_categories(exclude_categories), sort_tags)
-
-            final = _apply_template(prompt_template, tags)
-            print(f"[NeuralBooru] {final[:160]}...")
-            if dropped:
-                print(f"[NeuralBooru] dropped {len(dropped)} non-tags: {dropped}")
-            return (final, ", ".join(dropped), tags)
-
-        except urllib.error.HTTPError as e:
-            return self._fail(
-                f"Server returned HTTP {e.code}: {_http_error_detail(e)}",
-                on_error, prompt_template, user_prompt, e)
-        except urllib.error.URLError as e:
-            return self._fail(
-                f"Could not reach the LLM server at {lm_studio_url} ({e.reason}). "
-                f"Is it running?", on_error, prompt_template, user_prompt, e)
-        except Exception as e:
-            return self._fail(f"Unexpected error: {e}",
-                              on_error, prompt_template, user_prompt, e)
-
-    # base URL -> bool, probed once per server per session
-    _OLLAMA_CACHE = {}
-
-    def _is_ollama(self, base):
-        """Detect an Ollama server by its native /api/version endpoint.
-        LM Studio and other OpenAI-compatible servers 404 this instantly."""
-        cached = self._OLLAMA_CACHE.get(base)
-        if cached is not None:
-            return cached
-        try:
-            with urllib.request.urlopen(base + "/api/version", timeout=5):
-                found = True
-        except Exception:
-            found = False
-        self._OLLAMA_CACHE[base] = found
-        return found
-
-    def _fail(self, msg, on_error, prompt_template, user_prompt, exc):
-        """Surface an LLM failure per on_error: raise it, or fall back to
-        the raw input text so the workflow still produces an image."""
-        if on_error == "raise":
-            raise RuntimeError(f"NeuralBooru: {msg}") from exc
-        print(f"[NeuralBooru] {msg} - falling back to raw input text")
-        return (_apply_template(prompt_template, user_prompt), "", user_prompt)
-
-    def _validate(self, text, enabled, strict, fuzzy_cutoff,
-                  min_post_count, max_tags, exclude=(), sort_tags=False):
-        """Filter LLM tags against the Danbooru vocabulary.
-
-        Returns (tag_string, dropped_list). Falls back to the raw text if
-        validation is off or the tag database could not be loaded.
-        """
-        if not enabled:
-            return text, []
-        db = tagdb.get_db()
-        if db is None:
-            return text, []
-        prompt, _kept, dropped = db.validate(
-            text,
-            strict=strict,
-            fuzzy_cutoff=fuzzy_cutoff,
-            min_post_count=min_post_count,
-            max_tags=max_tags,
-            exclude_categories=exclude,
-            sort_tags=sort_tags,
-        )
-        return prompt, dropped
+            raw_tags, is_fallback = NeuralBooruLLM().generate(
+                user_prompt, system_prompt, model, enable_thinking,
+                temperature, max_tokens, seed, lm_studio_url,
+                timeout=timeout, api_key=api_key, on_error=on_error)
+        except RuntimeError as e:
+            raise RuntimeError(
+                str(e).replace("NeuralBooruLLM:", "NeuralBooru:", 1)) from e
+        return NeuralBooruValidator().generate(
+            raw_tags, prompt_template, is_fallback=is_fallback,
+            validate_tags=validate_tags, strict_tags=strict_tags,
+            fuzzy_cutoff=fuzzy_cutoff, min_post_count=min_post_count,
+            max_tags=max_tags, exclude_categories=exclude_categories,
+            template_preset=template_preset, sort_tags=sort_tags)
 
 
 def _post_json(url, payload, headers, timeout):
@@ -386,12 +275,24 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "NeuralBooru": "NeuralBooru",
 }
 
+# NeuralBooru.generate delegates to these, so this import is load-bearing.
+# The absolute fallback covers standalone loading under the name
+# "neuralbooru" (tests). The finetune tooling loads __init__.py under a
+# different module name purely for its constants; there the split modules
+# cannot resolve their imports back to this module, so they stay None -
+# fine as long as generate() is never called in that context.
 try:
     from .llm_node import NeuralBooruLLM
     from .validator_node import NeuralBooruValidator
+except ImportError:
+    try:
+        from llm_node import NeuralBooruLLM
+        from validator_node import NeuralBooruValidator
+    except ImportError:
+        NeuralBooruLLM = NeuralBooruValidator = None
+
+if NeuralBooruLLM is not None:
     NODE_CLASS_MAPPINGS["NeuralBooruLLM"] = NeuralBooruLLM
     NODE_CLASS_MAPPINGS["NeuralBooruValidator"] = NeuralBooruValidator
     NODE_DISPLAY_NAME_MAPPINGS["NeuralBooruLLM"] = "NeuralBooru LLM"
     NODE_DISPLAY_NAME_MAPPINGS["NeuralBooruValidator"] = "NeuralBooru Validator"
-except ImportError:
-    pass
